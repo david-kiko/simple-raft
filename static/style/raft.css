@@ -1,0 +1,48 @@
+.node_name {
+    font-size: 26px;
+}
+
+.node_timer_count {
+    font-size: 30px;
+    fill: wheat;
+}
+
+.node_term {
+    font-size: 30px;
+}
+
+.node_timer {
+    stroke-width: 8;
+    stroke: darkblue;
+    stroke-dasharray: 315, 315;
+    stroke-dashoffset: 315;
+    opacity: 0.5;
+    fill: none
+}
+
+.dot {
+    fill: none;
+    stroke: #b5580d;
+    stroke-width: 3;
+}
+
+.follower {
+    fill: palevioletred;
+    stroke: #b5580d;
+    stroke-width: 8;
+    opacity: 0.8
+}
+
+.candidate {
+    fill: darkolivegreen;
+    stroke: #b5580d;
+    stroke-width: 8;
+    opacity: 0.8
+}
+
+.leader {
+    fill: rebeccapurple;
+    stroke: #b5580d;
+    stroke-width: 8;
+    opacity: 0.8
+}

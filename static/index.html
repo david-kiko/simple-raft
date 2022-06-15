@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Raft集群 监控动画 - Raft Cluster Monitor </title>
+    <link rel="stylesheet" type="text/css" href="style/raft.css?99">
+</head>
+<body>
+<svg id="raft" width="1600" height="900">
+    <g id="cluster" transform="translate(300 100)"/>
+</svg>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/snap.svg/0.5.1/snap.svg-min.js"></script>
+<script src="scripts/snap.plugin.js"></script>
+<script type="text/javascript" charset="utf-8">
+    // let socket = io('/raft-monitor');
+    // socket.on('connect', function () {
+    //     socket.emit('client action', {data: 'raft monitor is connected!'});
+    // });
+    //
+    // socket.on('update state', function (msg) {
+    //     update_state(msg);
+    // });
+    //
+    // socket.on('heartbeat', function (msg) {
+    //     console.log('heartbeat: ' + msg);
+    //     let leader = JSON.parse(msg);
+    //     update_state(msg, false);
+    //     heartbeat(leader);
+    // });
+
+    function reset_timer(node_g) {
+        node_g.select(`.node_timer`).attr({"stroke-dashoffset": 315})
+        node_g.select(`.node_timer_count`).attr({text: "0000"});
+    }
+
+    function update_state(msg, update_timer = true) {
+        console.log('update state: ' + msg);
+        let data = JSON.parse(msg);
+        let node_g = snap.select(`#S${data.id}`);
+        node_g.select(`circle`).attr({class: data.state});
+        node_g.select(`.node_term`).attr({text: `${data.term}`});
+
+        if (update_timer) {
+            Snap.animate(0, data.timeout, function (value) {
+                node_g.select(`.node_timer_count`).attr({text: Math.round(data.timeout - value)});
+            }, data.timeout);
+            let timer = node_g.select(`.node_timer`);
+            reset_timer(node_g);
+            timer.animate({"stroke-dashoffset": 0},
+                data.timeout, mina.easeinout, reset_timer.bind(null, node_g));
+        }
+    }
+
+
+    snap = Snap('#raft');
+    translates = [
+        [200, 0], [0, 180], [400, 180], [80, 400], [320, 400]
+    ]
+    for (let i = 0; i < 5; i++) {
+        let cluster_g = snap.select('#cluster');
+        let node = `S${i}`;
+        let node_g = cluster_g.g().attr({
+            id: node,
+            transform: `translate(${translates[i][0]} ${translates[i][1]})`
+        });
+        node_g.circle(50, 80, 50).addClass("follower");
+        node_g.text(40, 65, "1").addClass("node_term");
+        node_g.text(20, 95, "").addClass("node_timer_count");
+        node_g.text(35, 122, node).addClass("node_name");
+        node_g.path("M 50, 30 a 50,50 0 1,1 0,100 a 50,50 0 1,1 0,-100").addClass("node_timer");
+    }
+
+    let points = [
+        [250, 150], [120, 260], [380, 260], [150, 410], [350, 410]
+    ]
+
+    function heartbeat_paths() {
+        let g = snap.select('#cluster').g();
+        for (let i = 0; i < 5; i++) {
+            for (let j = 0; j < 5; j++) {
+                if (i === j) continue;
+                let path = snap.path("M " + points[i][0] + "," + points[i][1]
+                    + " L " + points[j][0] + "," + points[j][1])
+                    .attr({"stroke": "blue", "stroke-dasharray": "5 10"});
+                g.add(path);
+                g.circle(points[i][0], points[i][1], 10)
+                    .attr({id: `dot-${i}-${j}`, class: "dot"});
+            }
+        }
+    }
+
+    function reset_dot(dot, position) {
+        dot.attr(position);
+    }
+
+    function heartbeat(leader) {
+        for (let j = 0; j < 5; j++) {
+            if (leader.id === j) continue;
+            let dot = snap.select(`#dot-${leader.id}-${j}`);
+            dot.animate(
+                {cx: points[j][0], cy: points[j][1]},
+                leader.timeout,
+                mina.linear,
+                reset_dot.bind(null, dot, {cx: points[leader.id][0], cy: points[leader.id][1]})
+            );
+        }
+    }
+
+    heartbeat_paths();
+
+</script>
+</body>
+</html>
