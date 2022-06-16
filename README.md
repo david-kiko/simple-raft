@@ -18,7 +18,7 @@ go build -o simple-raft
 
 ### run
 ```
-go get go get github.com/mattn/goreman
+go install github.com/mattn/goreman@latest
 goreman start
 ```
 
