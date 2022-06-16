@@ -3,7 +3,6 @@ package raft
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/phuslu/log"
 	"math/rand"
 	"net/http"
@@ -158,14 +157,15 @@ func (rf *Raft) Start() {
 
 				select {
 				case <-rf.heartbeatC:
-					log.Info().Msgf("follower-%d recived heartbeat\n", rf.Me)
+					//log.Info().Msgf("follower-%d recived heartbeat\n", rf.Me)
+					ws(rf, timeout, "update")
 				case <-time.After(timeout):
-					log.Info().Msgf("follower-%d timeout\n", rf.Me)
 					rf.state = Candidate
+					log.Info().Msgf("Node: %d 超时成为Candidate", rf.Me)
 					ws(rf, timeout, "update")
 				}
 			case Candidate:
-				log.Info().Msgf("Node: %d, I'm candidate\n", rf.Me)
+				log.Info().Msgf("Node: %d 成为Candidate", rf.Me)
 				rf.currentTerm++
 				rf.votedFor = rf.Me
 				rf.voteCount = 1
@@ -176,10 +176,12 @@ func (rf *Raft) Start() {
 
 				case <-time.After(timeout):
 					rf.state = Follower
+					log.Info().Msgf("Node: %d 超时成为Follower", rf.Me)
 					ws(rf, timeout, "update")
 				case <-rf.toLeaderC:
-					log.Info().Msgf("Node: %d, I'm leader\n", rf.Me)
+
 					rf.state = Leader
+					log.Info().Msgf("Node: %d 成为leader", rf.Me)
 					ws(rf, timeout, "update")
 
 					// 初始化 peers 的 nextIndex 和 matchIndex
@@ -190,14 +192,14 @@ func (rf *Raft) Start() {
 						rf.matchIndex[i] = 0
 					}
 
-					go func() {
-						i := 0
-						for {
-							i++
-							rf.log = append(rf.log, LogEntry{rf.currentTerm, i, fmt.Sprintf("user send : %d", i)})
-							time.Sleep(3 * time.Second)
-						}
-					}()
+					//go func() {
+					//	i := 0
+					//	for {
+					//		i++
+					//		rf.log = append(rf.log, LogEntry{rf.currentTerm, i, fmt.Sprintf("user send : %d", i)})
+					//		time.Sleep(3 * time.Second)
+					//	}
+					//}()
 				}
 			case Leader:
 				rf.broadcastHeartbeat()
@@ -248,6 +250,8 @@ func (rf *Raft) sendRequestVote(serverID int, args VoteArgs, reply *VoteReply) {
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
 		rf.state = Follower
+		log.Info().Msgf("Node: %d 成为Follower", rf.Me)
+
 		rf.votedFor = -1
 		return
 	}
@@ -326,7 +330,6 @@ func httpPostJson(msg WsMessage) {
 		return
 	}
 	resp.Body.Close()
-	log.Info().Msgf("发送http消息成功 %d", resp.StatusCode)
 }
 
 func ws(rf *Raft, timeout time.Duration, event string) {
@@ -362,6 +365,7 @@ func (rf *Raft) sendHeartbeat(serverID int, args HeartbeatArgs, reply *Heartbeat
 		if reply.Term > rf.currentTerm {
 			rf.currentTerm = reply.Term
 			rf.state = Follower
+			log.Info().Msgf("Node: %d 成为Follower", rf.Me)
 			rf.votedFor = -1
 			return
 		}
