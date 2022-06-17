@@ -75,11 +75,6 @@ func (rf *Raft) RequestVote(args VoteArgs, reply *VoteReply) error {
 	return nil
 }
 
-func (rf *Raft) Store(data string) error {
-	rf.log = append(rf.log, LogEntry{rf.currentTerm, 2, data})
-	return nil
-}
-
 // Heartbeat rpc method
 func (rf *Raft) Heartbeat(args HeartbeatArgs, reply *HeartbeatReply) error {
 
