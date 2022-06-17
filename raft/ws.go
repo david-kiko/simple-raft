@@ -17,6 +17,7 @@ type WsMessage struct {
 		Timeout     int        `json:"timeout"`
 		VotedFor    int        `json:"voted_for"`
 		VoteCount   int        `json:"voteCount"`
+		VoteList    []int      `json:"voteList"`
 		Log         []LogEntry `json:"log"`         // 日志条目集合
 		CommitIndex int        `json:"commitIndex"` // 被提交的最大索引
 		LastApplied int        `json:"lastApplied"` // 被应用到状态机的最大索引
@@ -52,6 +53,7 @@ func ws(rf *Raft, timeout time.Duration, event string) {
 	data.Msg.State = rf.state.String()
 	data.Msg.VotedFor = rf.votedFor
 	data.Msg.VoteCount = rf.voteCount
+	data.Msg.VoteList = rf.voteList
 	//data.Msg.Log = rf.log
 	data.Msg.CommitIndex = rf.commitIndex
 	data.Msg.LastApplied = rf.lastApplied

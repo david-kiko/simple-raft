@@ -58,6 +58,7 @@ type Raft struct {
 	currentTerm int
 	votedFor    int
 	voteCount   int
+	voteList    []int      //拥有的选票
 	log         []LogEntry // 日志条目集合
 	commitIndex int        // 被提交的最大索引
 	lastApplied int        // 被应用到状态机的最大索引
@@ -163,13 +164,13 @@ func (rf *Raft) Start() {
 					ws(rf, timeout, "update")
 				case <-time.After(timeout):
 					rf.state = Candidate
-					log.Info().Msgf("Node: %d 超时成为Candidate", rf.Me)
+					//log.Info().Msgf("Node: %d 超时成为Candidate", rf.Me)
 					ws(rf, timeout, "update")
 				}
 			case Candidate:
-				log.Info().Msgf("Node: %d 成为Candidate", rf.Me)
 				rf.currentTerm++
 				rf.votedFor = rf.Me
+				rf.voteList = []int{rf.Me}
 				rf.voteCount = 1
 				go rf.broadcastRequestVote()
 
@@ -178,12 +179,12 @@ func (rf *Raft) Start() {
 
 				case <-time.After(timeout):
 					rf.state = Follower
-					log.Info().Msgf("Node: %d 超时成为Follower", rf.Me)
+					//log.Info().Msgf("Node: %d 超时成为Follower", rf.Me)
 					ws(rf, timeout, "update")
 				case <-rf.toLeaderC:
 
 					rf.state = Leader
-					log.Info().Msgf("Node: %d 成为leader", rf.Me)
+					//log.Info().Msgf("Node: %d 成为leader", rf.Me)
 					ws(rf, timeout, "update")
 
 					// 初始化 peers 的 nextIndex 和 matchIndex
@@ -243,14 +244,14 @@ func (rf *Raft) sendRequestVote(serverID int, args VoteArgs, reply *VoteReply) {
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
 		rf.state = Follower
-		log.Info().Msgf("Node: %d 成为Follower", rf.Me)
-
+		//log.Info().Msgf("Node: %d 成为Follower", rf.Me)
 		rf.votedFor = -1
 		return
 	}
 
 	if reply.VoteGranted {
 		rf.voteCount++
+		rf.voteList = append(rf.voteList, serverID)
 	}
 
 	if rf.voteCount >= len(rf.Nodes)/2+1 {
