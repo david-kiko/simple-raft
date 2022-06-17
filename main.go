@@ -5,7 +5,6 @@ import (
 	"github.com/phuslu/log"
 	"os"
 	"simple-raft/raft"
-	"strings"
 )
 
 func init() {
@@ -23,22 +22,33 @@ func init() {
 	}
 }
 
+func getNodes(clusters map[int]string, id int) (result map[int]string) {
+	result = make(map[int]string)
+	for k, v := range clusters {
+		if k == id {
+			continue
+		}
+		result[k] = v
+	}
+	return result
+}
+
 func main() {
 	port := flag.String("port", ":9091", "rpc listen port")
-	cluster := flag.String("cluster", "127.0.0.1:9091", "comma sep")
 	id := flag.Int("id", 1, "node ID")
-
 	flag.Parse()
-	clusters := strings.Split(*cluster, ",")
 
-	ns := make(map[int]*raft.Node)
-	for k, v := range clusters {
-		ns[k] = raft.NewNode(v)
+	clusters := map[int]string{
+		0: "127.0.0.1:12379",
+		1: "127.0.0.1:22379",
+		2: "127.0.0.1:32379",
+		3: "127.0.0.1:42379",
+		4: "127.0.0.1:52379",
 	}
 
 	raftIns := &raft.Raft{}
 	raftIns.Me = *id
-	raftIns.Nodes = ns
+	raftIns.Nodes = getNodes(clusters, *id)
 	raftIns.Rpc(*port)
 	raftIns.Start()
 

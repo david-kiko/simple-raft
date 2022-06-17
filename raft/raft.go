@@ -8,18 +8,6 @@ import (
 	"time"
 )
 
-type Node struct {
-	connect bool
-	address string
-}
-
-// 新建节点
-func NewNode(address string) *Node {
-	node := &Node{}
-	node.address = address
-	return node
-}
-
 // State def
 type State int
 
@@ -53,7 +41,7 @@ type LogEntry struct {
 // Raft Node
 type Raft struct {
 	Me          int
-	Nodes       map[int]*Node
+	Nodes       map[int]string
 	state       State
 	currentTerm int
 	votedFor    int
@@ -188,8 +176,8 @@ func (rf *Raft) Start() {
 					ws(rf, timeout, "update")
 
 					// 初始化 peers 的 nextIndex 和 matchIndex
-					rf.nextIndex = make([]int, len(rf.Nodes))
-					rf.matchIndex = make([]int, len(rf.Nodes))
+					rf.nextIndex = make([]int, len(rf.Nodes)+1)
+					rf.matchIndex = make([]int, len(rf.Nodes)+1)
 					for i := range rf.Nodes {
 						rf.nextIndex[i] = 1
 						rf.matchIndex[i] = 0
@@ -230,10 +218,10 @@ func (rf *Raft) broadcastRequestVote() {
 	}
 }
 
-func (rf *Raft) sendRequestVote(serverID int, args VoteArgs, reply *VoteReply) {
-	client, err := rpc.DialHTTP("tcp", rf.Nodes[serverID].address)
+func (rf *Raft) sendRequestVote(otherID int, args VoteArgs, reply *VoteReply) {
+	client, err := rpc.DialHTTP("tcp", rf.Nodes[otherID])
 	if err != nil {
-		log.Error().Msgf("dialing: ", err)
+		log.Error().Msgf("连接 %s 的rpc服务错误: %s", rf.Nodes[otherID], err)
 		return
 	}
 
@@ -244,14 +232,15 @@ func (rf *Raft) sendRequestVote(serverID int, args VoteArgs, reply *VoteReply) {
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
 		rf.state = Follower
-		//log.Info().Msgf("Node: %d 成为Follower", rf.Me)
 		rf.votedFor = -1
+		timeout := time.Duration(rand.Intn(5-3)+3) * time.Second
+		ws(rf, timeout, "update")
 		return
 	}
 
 	if reply.VoteGranted {
 		rf.voteCount++
-		rf.voteList = append(rf.voteList, serverID)
+		rf.voteList = append(rf.voteList, otherID)
 	}
 
 	if rf.voteCount >= len(rf.Nodes)/2+1 {
@@ -276,7 +265,7 @@ type HeartbeatReply struct {
 }
 
 func (rf *Raft) broadcastHeartbeat() {
-	for i := range rf.Nodes {
+	for otherID := range rf.Nodes {
 
 		var args HeartbeatArgs
 		args.Term = rf.currentTerm
@@ -285,7 +274,7 @@ func (rf *Raft) broadcastHeartbeat() {
 
 		// 计算 preLogIndex 、preLogTerm
 		// 提取 preLogIndex - baseIndex 之后的entry，发送给 follower
-		prevLogIndex := rf.nextIndex[i] - 1
+		prevLogIndex := rf.nextIndex[otherID] - 1
 		if rf.getLastIndex() > prevLogIndex {
 			args.PrevLogIndex = prevLogIndex
 			args.PrevLogTerm = rf.log[prevLogIndex].LogTerm
@@ -293,18 +282,18 @@ func (rf *Raft) broadcastHeartbeat() {
 			log.Info().Msgf("send entries: %v\n", args.Entries)
 		}
 
-		go func(i int, args HeartbeatArgs) {
+		go func(otherID int, args HeartbeatArgs) {
 			var reply HeartbeatReply
-			rf.sendHeartbeat(i, args, &reply)
-		}(i, args)
+			rf.sendHeartbeat(otherID, args, &reply)
+		}(otherID, args)
 	}
 }
 
-func (rf *Raft) sendHeartbeat(serverID int, args HeartbeatArgs, reply *HeartbeatReply) {
+func (rf *Raft) sendHeartbeat(otherID int, args HeartbeatArgs, reply *HeartbeatReply) {
 
-	client, err := rpc.DialHTTP("tcp", rf.Nodes[serverID].address)
+	client, err := rpc.DialHTTP("tcp", rf.Nodes[otherID])
 	if err != nil {
-		log.Error().Msgf("dialing: ", err)
+		log.Error().Msgf("连接 %s 的rpc服务错误: %s", rf.Nodes[otherID], err)
 		return
 	}
 
@@ -314,16 +303,17 @@ func (rf *Raft) sendHeartbeat(serverID int, args HeartbeatArgs, reply *Heartbeat
 	// 如果 leader 节点落后于 follower 节点
 	if reply.Success {
 		if reply.NextIndex > 0 {
-			rf.nextIndex[serverID] = reply.NextIndex
-			rf.matchIndex[serverID] = rf.nextIndex[serverID] - 1
+			rf.nextIndex[otherID] = reply.NextIndex
+			rf.matchIndex[otherID] = rf.nextIndex[otherID] - 1
 		}
 	} else {
 		// 如果 leader 的 term 小于 follower 的 term， 需要将 leader 转变为 follower 重新选举
 		if reply.Term > rf.currentTerm {
 			rf.currentTerm = reply.Term
 			rf.state = Follower
-			log.Info().Msgf("Node: %d 成为Follower", rf.Me)
 			rf.votedFor = -1
+			timeout := time.Duration(rand.Intn(5-3)+3) * time.Second
+			ws(rf, timeout, "update")
 			return
 		}
 	}
