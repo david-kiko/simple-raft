@@ -132,13 +132,10 @@ func (rf *Raft) Start() {
 	rf.toLeaderC = make(chan bool)
 
 	go func() {
-
 		rand.Seed(time.Now().UnixNano())
 
 		for {
-			//time.Sleep(5 * time.Second)
 			switch rf.state {
-
 			case Follower:
 				timeout := time.Duration(rand.Intn(5-3)+3) * time.Second
 
@@ -147,7 +144,6 @@ func (rf *Raft) Start() {
 					ws(rf, timeout, "update")
 				case <-time.After(timeout):
 					rf.state = Candidate
-					//log.Info().Msgf("Node: %d 超时成为Candidate", rf.Me)
 					ws(rf, timeout, "update")
 				}
 			case Candidate:
@@ -159,15 +155,11 @@ func (rf *Raft) Start() {
 
 				timeout := time.Duration(rand.Intn(5-3)+3) * time.Second
 				select {
-
 				case <-time.After(timeout):
 					rf.state = Follower
-					//log.Info().Msgf("Node: %d 超时成为Follower", rf.Me)
 					ws(rf, timeout, "update")
 				case <-rf.toLeaderC:
-
 					rf.state = Leader
-					//log.Info().Msgf("Node: %d 成为leader", rf.Me)
 					ws(rf, timeout, "update")
 
 					// 初始化 peers 的 nextIndex 和 matchIndex
@@ -180,9 +172,9 @@ func (rf *Raft) Start() {
 				}
 			case Leader:
 				rf.broadcastHeartbeat()
-				timeout := time.Duration(2) * time.Second
-				ws(rf, timeout, "heartbeat")
-				time.Sleep(timeout)
+				timeoutHeartbeat := time.Duration(2) * time.Second
+				ws(rf, timeoutHeartbeat, "heartbeat")
+				time.Sleep(timeoutHeartbeat)
 			}
 		}
 
@@ -200,28 +192,26 @@ type VoteReply struct {
 }
 
 func (rf *Raft) broadcastRequestVote() {
-	var args = VoteArgs{
-		Term:        rf.currentTerm,
-		CandidateID: rf.Me,
-	}
 
-	for i := range rf.Nodes {
-		go func(i int) {
-			var reply VoteReply
-			rf.sendRequestVote(i, args, &reply)
-		}(i)
+	for otherID, addr := range rf.Nodes {
+		go rf.sendRequestVote(otherID, addr)
 	}
 }
 
-func (rf *Raft) sendRequestVote(otherID int, args VoteArgs, reply *VoteReply) {
-	client, err := rpc.DialHTTP("tcp", rf.Nodes[otherID])
+func (rf *Raft) sendRequestVote(otherID int, addr string) {
+	args := VoteArgs{
+		Term:        rf.currentTerm,
+		CandidateID: rf.Me,
+	}
+	var reply VoteReply
+	client, err := rpc.DialHTTP("tcp", addr)
 	if err != nil {
 		log.Error().Msgf("连接 %s 的rpc服务错误: %s", rf.Nodes[otherID], err)
 		return
 	}
 
 	defer client.Close()
-	client.Call("Raft.RequestVote", args, reply)
+	client.Call("Raft.RequestVote", args, &reply)
 
 	// 当前candidate节点无效
 	if reply.Term > rf.currentTerm {
@@ -260,7 +250,7 @@ type HeartbeatReply struct {
 }
 
 func (rf *Raft) broadcastHeartbeat() {
-	for otherID := range rf.Nodes {
+	for otherID, addr := range rf.Nodes {
 
 		var args HeartbeatArgs
 		args.Term = rf.currentTerm
@@ -277,23 +267,20 @@ func (rf *Raft) broadcastHeartbeat() {
 			log.Info().Msgf("send entries: %v\n", args.Entries)
 		}
 
-		go func(otherID int, args HeartbeatArgs) {
-			var reply HeartbeatReply
-			rf.sendHeartbeat(otherID, args, &reply)
-		}(otherID, args)
+		go rf.sendHeartbeat(otherID, addr, args)
 	}
 }
 
-func (rf *Raft) sendHeartbeat(otherID int, args HeartbeatArgs, reply *HeartbeatReply) {
-
-	client, err := rpc.DialHTTP("tcp", rf.Nodes[otherID])
+func (rf *Raft) sendHeartbeat(otherID int, addr string, args HeartbeatArgs) {
+	var reply HeartbeatReply
+	client, err := rpc.DialHTTP("tcp", addr)
 	if err != nil {
-		log.Error().Msgf("连接 %s 的rpc服务错误: %s", rf.Nodes[otherID], err)
+		log.Error().Msgf("连接 %s 的rpc服务错误: %s", addr, err)
 		return
 	}
 
 	defer client.Close()
-	client.Call("Raft.Heartbeat", args, reply)
+	client.Call("Raft.Heartbeat", args, &reply)
 
 	// 如果 leader 节点落后于 follower 节点
 	if reply.Success {
